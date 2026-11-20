@@ -1,0 +1,3 @@
+[submodule "external/kdmapper"]
+	path = external/kdmapper
+	url = https://github.com/TheCruZ/kdmapper.git

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{314A5EC1-EF96-4588-9BF3-A8C834574293}</ProjectGuid><Keyword>Win32Proj</Keyword><RootNamespace>KdmapperLibrary</RootNamespace><WindowsTargetPlatformVersion>10.0.28000.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v145</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets"><Import Project="..\..\build\Directory.Build.props" /></ImportGroup>
+  <PropertyGroup><OutDir>$(RepoRoot)x64\$(Configuration)\</OutDir><IntDir>$(RepoRoot)x64\obj\$(ProjectName)\$(Configuration)\</IntDir><TargetName>kdmapper</TargetName></PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><AdditionalIncludeDirectories>$(RepoRoot)external\kdmapper\kdmapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>KDLIBMODE;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions><TreatWarningAsError>false</TreatWarningAsError></ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(RepoRoot)external\kdmapper\kdmapper\intel_driver.cpp" />
+    <ClCompile Include="$(RepoRoot)external\kdmapper\kdmapper\main.cpp" />
+    <ClCompile Include="$(RepoRoot)external\kdmapper\kdmapper\kdmapper.cpp" />
+    <ClCompile Include="$(RepoRoot)external\kdmapper\kdmapper\portable_executable.cpp" />
+    <ClCompile Include="$(RepoRoot)external\kdmapper\kdmapper\service.cpp" />
+    <ClCompile Include="$(RepoRoot)external\kdmapper\kdmapper\KDSymbolsHandler.cpp" />
+    <ClCompile Include="$(RepoRoot)external\kdmapper\kdmapper\utils.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
