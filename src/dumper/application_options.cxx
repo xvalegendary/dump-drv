@@ -1,5 +1,7 @@
 #include "application.hxx"
 
+#include "shared/protocol.hxx"
+
 #include <cerrno>
 #include <cwchar>
 #include <iomanip>
@@ -15,6 +17,18 @@ std::wstring sanitize(std::wstring name) {
     return name;
 }
 
+bool valid_module_name(const std::wstring_view name) {
+    if (name.empty() || name.size() >= dump::protocol::maximum_module_name) {
+        return false;
+    }
+    for (const auto value : name) {
+        if (!((value >= L'a' && value <= L'z') || (value >= L'A' && value <= L'Z') || (value >= L'0' && value <= L'9') || value == L'.' || value == L'_' || value == L'-' || value == L'$')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }
 
 namespace dump {
@@ -23,13 +37,31 @@ Result<Options> parse_options(const std::span<const std::wstring_view> arguments
     try {
         Options result{};
         result.output_directory = std::filesystem::current_path();
+        result.module_name = L"iqvw64e.sys";
+        unsigned int modes{};
         for (std::size_t index = 0; index < arguments.size(); ++index) {
             const auto argument = arguments[index];
             if (argument == L"--keep-partial") {
                 result.keep_partial = true;
+            } else if (argument == L"--conceal") {
+                result.conceal = true;
+            } else if (argument == L"--no-conceal") {
+                result.conceal = false;
+            } else if (argument == L"--sections") {
+                ++modes;
+                result.mode = Mode::sections;
+            } else if (argument == L"--dmp") {
+                ++modes;
+                result.mode = Mode::dump;
+            } else if (argument == L"--sectionsanddump") {
+                ++modes;
+                result.mode = Mode::sections_and_dump;
             } else if (argument == L"--output") {
                 if (++index == arguments.size() || arguments[index].empty()) return Status::invalid_argument;
                 result.output_directory = arguments[index];
+            } else if (argument == L"--module") {
+                if (++index == arguments.size()) return Status::invalid_argument;
+                result.module_name.assign(arguments[index]);
             } else if (argument == L"--pid") {
                 if (++index == arguments.size()) return Status::invalid_argument;
                 const auto text = arguments[index];
@@ -47,7 +79,7 @@ Result<Options> parse_options(const std::span<const std::wstring_view> arguments
                 result.process_name.assign(argument);
             }
         }
-        if (result.process_id.has_value() == !result.process_name.empty()) {
+        if (modes > 1 || result.process_id.has_value() == !result.process_name.empty() || !valid_module_name(result.module_name)) {
             return Status::invalid_argument;
         }
         return result;

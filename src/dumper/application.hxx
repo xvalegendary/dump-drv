@@ -13,11 +13,20 @@
 
 namespace dump {
 
+enum class Mode : unsigned int {
+    dump = 0,
+    sections,
+    sections_and_dump
+};
+
 struct Options {
     std::optional<std::uint32_t> process_id;
     std::wstring process_name;
     std::filesystem::path output_directory;
+    std::wstring module_name;
+    Mode mode{Mode::dump};
     bool keep_partial{};
+    bool conceal{true};
 };
 
 Result<Options> parse_options(std::span<const std::wstring_view> arguments) noexcept;

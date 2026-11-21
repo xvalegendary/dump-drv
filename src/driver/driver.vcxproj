@@ -17,8 +17,8 @@
     <Link><EntryPointSymbol>DriverEntry</EntryPointSymbol><AdditionalDependencies>Wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="entry.cxx" /><ClCompile Include="device.cxx" /><ClCompile Include="process_snapshot.cxx" /><ClCompile Include="session_state.cxx" /><ClCompile Include="symbol_table.cxx" /><ClCompile Include="transfer.cxx" /><ClCompile Include="..\shared\validation.cxx" />
+    <ClCompile Include="entry.cxx" /><ClCompile Include="device.cxx" /><ClCompile Include="conceal.cxx" /><ClCompile Include="image_sections.cxx" /><ClCompile Include="process_snapshot.cxx" /><ClCompile Include="session_state.cxx" /><ClCompile Include="symbol_table.cxx" /><ClCompile Include="transfer.cxx" /><ClCompile Include="..\shared\validation.cxx" />
   </ItemGroup>
-  <ItemGroup><ClInclude Include="device.hxx" /><ClInclude Include="process_snapshot.hxx" /><ClInclude Include="session_state.hxx" /><ClInclude Include="symbol_table.hxx" /><ClInclude Include="transfer.hxx" /></ItemGroup>
+  <ItemGroup><ClInclude Include="conceal.hxx" /><ClInclude Include="device.hxx" /><ClInclude Include="image_sections.hxx" /><ClInclude Include="process_snapshot.hxx" /><ClInclude Include="session_state.hxx" /><ClInclude Include="symbol_table.hxx" /><ClInclude Include="transfer.hxx" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

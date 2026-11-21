@@ -29,6 +29,41 @@ TEST_CASE("application", application_parses_pid_and_rejects_mixed_target) {
     REQUIRE(dump::parse_options(mixed).status() == dump::Status::invalid_argument);
 }
 
+TEST_CASE("application", application_defaults_to_full_dump_with_conceal) {
+    const std::array<std::wstring_view, 1> arguments{L"notepad.exe"};
+    const auto options = dump::parse_options(arguments);
+    REQUIRE(options);
+    REQUIRE(options.value().mode == dump::Mode::dump);
+    REQUIRE(options.value().conceal);
+    REQUIRE(options.value().module_name == L"iqvw64e.sys");
+}
+
+TEST_CASE("application", application_selects_mutually_exclusive_modes) {
+    const std::array<std::wstring_view, 2> sections{L"notepad.exe", L"--sections"};
+    const auto section_options = dump::parse_options(sections);
+    REQUIRE(section_options);
+    REQUIRE(section_options.value().mode == dump::Mode::sections);
+    const std::array<std::wstring_view, 2> both{L"--sectionsanddump", L"notepad.exe"};
+    const auto both_options = dump::parse_options(both);
+    REQUIRE(both_options);
+    REQUIRE(both_options.value().mode == dump::Mode::sections_and_dump);
+    const std::array<std::wstring_view, 3> conflicting{L"--sections", L"--dmp", L"notepad.exe"};
+    REQUIRE(dump::parse_options(conflicting).status() == dump::Status::invalid_argument);
+}
+
+TEST_CASE("application", application_parses_conceal_controls) {
+    const std::array<std::wstring_view, 3> arguments{L"--no-conceal", L"--module", L"iqvw64e.sys"};
+    const auto options = dump::parse_options(arguments);
+    REQUIRE(!options);
+    const std::array<std::wstring_view, 4> valid{L"--no-conceal", L"--module", L"iqvw64e.sys", L"notepad.exe"};
+    const auto valid_options = dump::parse_options(valid);
+    REQUIRE(valid_options);
+    REQUIRE(!valid_options.value().conceal);
+    REQUIRE(valid_options.value().module_name == L"iqvw64e.sys");
+    const std::array<std::wstring_view, 3> escaped{L"--module", L"..\\evil.sys", L"notepad.exe"};
+    REQUIRE(dump::parse_options(escaped).status() == dump::Status::invalid_argument);
+}
+
 TEST_CASE("application", application_formats_exact_output_name) {
     std::tm time{};
     time.tm_year = 126;

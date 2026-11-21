@@ -19,6 +19,7 @@ public:
     Status begin_snapshot() noexcept;
     Status end_snapshot() noexcept;
     Status prepare_shutdown(protocol::u32 active_rundown) noexcept;
+    Status claim_conceal() noexcept;
     Status stop() noexcept;
     Status validate_process(protocol::u64 process_id, protocol::usize process_object) const noexcept;
     Status accept_sequence(protocol::u64 sequence) noexcept;
@@ -33,6 +34,7 @@ private:
     protocol::u64 process_id_{};
     protocol::usize process_object_{};
     protocol::u64 last_sequence_{};
+    bool concealed_{};
 };
 
 }

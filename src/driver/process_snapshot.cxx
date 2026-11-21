@@ -40,6 +40,7 @@ NTSTATUS ProcessSnapshot::attach(const protocol::u64 process_id, protocol::Attac
     response.eprocess = reinterpret_cast<protocol::u64>(process);
     response.peb = get_process_peb_ ? reinterpret_cast<protocol::u64>(get_process_peb_(process)) : 0;
     response.image_base = get_section_base_ ? reinterpret_cast<protocol::u64>(get_section_base_(process)) : 0;
+    image_base_ = response.image_base;
     if (get_image_name_) {
         const auto* name = get_image_name_(process);
         if (name) {
@@ -63,6 +64,7 @@ void ProcessSnapshot::detach() noexcept {
         process_ = nullptr;
     }
     process_id_ = 0;
+    image_base_ = 0;
 }
 
 NTSTATUS ProcessSnapshot::query(const protocol::u64 address, protocol::RegionDescriptor& region) noexcept {
@@ -107,6 +109,10 @@ PEPROCESS ProcessSnapshot::process() const noexcept {
 
 protocol::u64 ProcessSnapshot::process_id() const noexcept {
     return process_id_;
+}
+
+protocol::u64 ProcessSnapshot::image_base() const noexcept {
+    return image_base_;
 }
 
 }

@@ -139,6 +139,17 @@ Status ManifestWriter::finalize(const std::filesystem::path& dump_path) noexcept
         if (status != Status::success) {
             return status;
         }
+        return finalize();
+    } catch (...) {
+        return Status::io_error;
+    }
+}
+
+Status ManifestWriter::finalize() noexcept {
+    try {
+        if (!stream_.is_open() || finalized_) {
+            return Status::invalid_state;
+        }
         stream_.flush();
         stream_.close();
         if (!MoveFileExW(partial_path_.c_str(), final_path_.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {

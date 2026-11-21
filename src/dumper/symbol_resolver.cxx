@@ -2,6 +2,7 @@
 #include "symbol_resolver.hxx"
 
 #include "crypto.hxx"
+#include "image_exports.hxx"
 #include "shared/validation.hxx"
 
 #include <Windows.h>
@@ -294,6 +295,50 @@ Result<protocol::SymbolPacket> SymbolResolver::resolve() noexcept {
         packet.packet_hash.fill(0);
         packet.packet_hash = crypto::sha256(std::span(reinterpret_cast<const std::byte*>(&packet), sizeof(packet)));
         return packet;
+    } catch (...) {
+        return Status::io_error;
+    }
+}
+
+Result<protocol::ConcealTargets> SymbolResolver::resolve_conceal(const std::wstring_view module_name) noexcept {
+    try {
+        if (module_name.empty() || module_name.size() >= protocol::maximum_module_name) {
+            return Status::invalid_argument;
+        }
+        const auto identity = provider_.identity();
+        if (!identity) {
+            return identity.status();
+        }
+        const auto table = read_export_table(identity.value().image_path);
+        if (!table) {
+            return table.status();
+        }
+        if (table.value().identity.timestamp != identity.value().identity.timestamp || table.value().identity.image_size != identity.value().identity.image_size) {
+            return Status::kernel_identity_mismatch;
+        }
+        const auto list = find_export(table.value(), "PsLoadedModuleList");
+        if (!list) {
+            return list.status();
+        }
+        protocol::ConcealTargets targets{};
+        targets.nt_timestamp = identity.value().identity.timestamp;
+        targets.nt_image_size = identity.value().identity.image_size;
+        targets.ps_loaded_module_list_rva = list.value();
+        targets.flags = protocol::conceal_all;
+        std::copy(module_name.begin(), module_name.end(), targets.module_name.begin());
+        const auto ci = find_loaded_module(L"ci.dll");
+        if (ci) {
+            targets.ci_timestamp = ci.value().identity.timestamp;
+            targets.ci_image_size = ci.value().identity.image_size;
+        } else {
+            targets.flags &= ~protocol::conceal_hash_bucket;
+        }
+        const protocol::KernelIdentity system_identity{targets.nt_timestamp, targets.nt_image_size, {}, 0};
+        const protocol::KernelIdentity client_identity{targets.ci_timestamp, targets.ci_image_size, {}, 0};
+        if (validation::validate_conceal_targets(targets, system_identity, client_identity) != Status::success) {
+            return Status::invalid_symbol_packet;
+        }
+        return targets;
     } catch (...) {
         return Status::io_error;
     }

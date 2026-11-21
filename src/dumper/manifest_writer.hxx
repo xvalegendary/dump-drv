@@ -23,6 +23,7 @@ public:
     Status error(std::wstring_view message) noexcept;
     Status region(std::size_t index, const protocol::RegionDescriptor& descriptor, std::uint64_t copied, std::int32_t native_status) noexcept;
     Status finalize(const std::filesystem::path& dump_path) noexcept;
+    Status finalize() noexcept;
     void discard(bool keep_partial) noexcept;
 
 private:

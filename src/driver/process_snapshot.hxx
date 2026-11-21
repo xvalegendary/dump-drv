@@ -15,6 +15,7 @@ public:
     NTSTATUS read(protocol::u64 address, void* destination, SIZE_T size, SIZE_T& transferred) noexcept;
     [[nodiscard]] PEPROCESS process() const noexcept;
     [[nodiscard]] protocol::u64 process_id() const noexcept;
+    [[nodiscard]] protocol::u64 image_base() const noexcept;
 
 private:
     using GetProcessPeb = PVOID(NTAPI*)(PEPROCESS);
@@ -24,6 +25,7 @@ private:
     PEPROCESS process_{};
     HANDLE process_handle_{};
     protocol::u64 process_id_{};
+    protocol::u64 image_base_{};
     GetProcessPeb get_process_peb_{};
     GetProcessSectionBaseAddress get_section_base_{};
     GetProcessImageFileName get_image_name_{};

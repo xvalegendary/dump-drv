@@ -22,6 +22,8 @@
     <ClCompile Include="console.cxx" />
     <ClCompile Include="crypto.cxx" />
     <ClCompile Include="driver_client.cxx" />
+    <ClCompile Include="image_exports.cxx" />
+    <ClCompile Include="section_dumper.cxx" />
     <ClCompile Include="manifest_writer.cxx" />
     <ClCompile Include="mapper.cxx" />
     <ClCompile Include="minidump_writer.cxx" />

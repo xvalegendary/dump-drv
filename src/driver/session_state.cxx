@@ -89,6 +89,14 @@ Status SessionState::prepare_shutdown(const protocol::u32 active_rundown) noexce
     return Status::success;
 }
 
+Status SessionState::claim_conceal() noexcept {
+    if (state_ != protocol::SessionState::attached || concealed_) {
+        return Status::invalid_state;
+    }
+    concealed_ = true;
+    return Status::success;
+}
+
 Status SessionState::stop() noexcept {
     if (state_ != protocol::SessionState::shutting_down) {
         return Status::invalid_state;

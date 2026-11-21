@@ -49,7 +49,12 @@
     <ClCompile Include="..\driver\session_state.cxx" />
     <ClCompile Include="..\blobgen\blob_encoder.cxx" />
     <ClCompile Include="protocol_tests.cxx" />
+    <ClCompile Include="pe_tests.cxx" />
+    <ClCompile Include="sections_tests.cxx" />
     <ClCompile Include="symbol_resolver_tests.cxx" />
+    <ClCompile Include="..\dumper\image_exports.cxx" />
+    <ClCompile Include="..\dumper\section_dumper.cxx" />
+    <ClCompile Include="..\dumper\driver_client.cxx" />
     <ClCompile Include="..\shared\validation.cxx" />
   </ItemGroup>
   <ItemDefinitionGroup>

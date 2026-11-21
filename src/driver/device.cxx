@@ -196,6 +196,28 @@ NTSTATUS Device::handle_control(PIRP irp, PIO_STACK_LOCATION stack) noexcept {
         } else {
             status = STATUS_INVALID_PARAMETER;
         }
+    } else if (code == protocol::ioctl_query_sections) {
+        protocol::SectionsRequest* request{};
+        if (buffered_request(stack, irp, request) && stack->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(protocol::SectionsResponse) && validation::validate_header(request->header, configuration_.header.nonce, sizeof(*request)) == Status::success && session_.accept_sequence(request->header.sequence) == Status::success) {
+            auto* output = static_cast<protocol::SectionsResponse*>(irp->AssociatedIrp.SystemBuffer);
+            status = sections_.query(snapshot_, *output);
+            if (!NT_SUCCESS(status)) {
+                output->native_status = status;
+            }
+            information = sizeof(*output);
+        } else {
+            status = STATUS_INVALID_PARAMETER;
+        }
+    } else if (code == protocol::ioctl_conceal) {
+        protocol::ConcealRequest* request{};
+        if (buffered_request(stack, irp, request) && stack->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(protocol::ConcealResponse) && validation::validate_header(request->header, configuration_.header.nonce, sizeof(*request)) == Status::success && session_.accept_sequence(request->header.sequence) == Status::success && session_.claim_conceal() == Status::success) {
+            const protocol::ConcealTargets targets = request->targets;
+            auto* output = static_cast<protocol::ConcealResponse*>(irp->AssociatedIrp.SystemBuffer);
+            status = conceal_.apply(targets, *output);
+            information = sizeof(*output);
+        } else {
+            status = STATUS_INVALID_PARAMETER;
+        }
     }
     ExReleaseFastMutex(&mutex_);
     return finish(status, information);

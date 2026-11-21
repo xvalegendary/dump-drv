@@ -42,13 +42,24 @@ struct FixedArray {
 };
 
 inline constexpr u32 magic = 0x504d5544;
-inline constexpr u16 version = 1;
+inline constexpr u16 version = 2;
 inline constexpr u64 maximum_transfer = 1024ull * 1024ull;
 inline constexpr u32 unavailable_offset = 0xffffffffu;
 inline constexpr u32 device_type = 0x8000;
 inline constexpr u32 method_buffered = 0;
 inline constexpr u32 method_out_direct = 2;
 inline constexpr u32 special_access = 3;
+inline constexpr u32 maximum_sections = 128;
+inline constexpr u32 section_name_size = 8;
+inline constexpr u32 maximum_module_name = 64;
+inline constexpr u32 maximum_scan_hits = 32;
+inline constexpr u32 conceal_module_list = 0x1;
+inline constexpr u32 conceal_unloaded = 0x2;
+inline constexpr u32 conceal_piddb = 0x4;
+inline constexpr u32 conceal_hash_bucket = 0x8;
+inline constexpr u32 conceal_headers = 0x10;
+inline constexpr u32 conceal_all = conceal_module_list | conceal_unloaded | conceal_piddb | conceal_hash_bucket | conceal_headers;
+
 constexpr u32 control_code(const u32 function, const u32 method) noexcept {
     return (device_type << 16) | (special_access << 14) | (function << 2) | method;
 }
@@ -58,6 +69,8 @@ inline constexpr u32 ioctl_set_symbols = control_code(0x802, method_buffered);
 inline constexpr u32 ioctl_query_region = control_code(0x803, method_buffered);
 inline constexpr u32 ioctl_read_memory = control_code(0x804, method_out_direct);
 inline constexpr u32 ioctl_prepare_shutdown = control_code(0x805, method_buffered);
+inline constexpr u32 ioctl_query_sections = control_code(0x806, method_buffered);
+inline constexpr u32 ioctl_conceal = control_code(0x807, method_buffered);
 
 using Nonce = FixedArray<u8, 32>;
 
@@ -67,7 +80,9 @@ enum class Command : u32 {
     set_symbols,
     query_region,
     read_memory,
-    prepare_shutdown
+    prepare_shutdown,
+    query_sections,
+    conceal
 };
 
 enum class SessionState : u32 {
@@ -188,7 +203,62 @@ struct alignas(8) ShutdownRequest {
     Header header{};
 };
 
+struct alignas(8) SectionDescriptor {
+    FixedArray<char, section_name_size> name{};
+    u64 virtual_address{};
+    u32 virtual_size{};
+    u32 raw_offset{};
+    u32 raw_size{};
+    u32 characteristics{};
+};
+
+struct alignas(8) SectionsRequest {
+    Header header{};
+};
+
+struct alignas(8) SectionsResponse {
+    u64 image_base{};
+    u32 image_size{};
+    u32 headers_size{};
+    u32 section_count{};
+    i32 native_status{};
+    u32 reserved{};
+    FixedArray<SectionDescriptor, maximum_sections> sections{};
+};
+
+struct ConcealTargets {
+    u32 nt_timestamp{};
+    u32 nt_image_size{};
+    u32 ps_loaded_module_list_rva{unavailable_offset};
+    u32 ci_timestamp{};
+    u32 ci_image_size{};
+    u32 flags{conceal_all};
+    u32 reserved{};
+    u32 reserved2{};
+    FixedArray<wide_char, maximum_module_name> module_name{};
+};
+
+struct alignas(8) ConcealRequest {
+    Header header{};
+    ConcealTargets targets{};
+};
+
+struct alignas(8) ConcealResponse {
+    u32 applied{};
+    u32 module_list_hidden{};
+    u32 unloaded_hidden{};
+    u32 piddb_hidden{};
+    u32 hash_bucket_hidden{};
+    u32 headers_erased{};
+    u32 name_hits{};
+    u32 reserved{};
+    i32 native_status{};
+    u32 reserved2{};
+};
+
 static_assert(sizeof(Header) == 48);
 static_assert(sizeof(Nonce) == 32);
+static_assert(sizeof(ConcealTargets) % 8 == 0);
+static_assert(sizeof(SectionDescriptor) == 32);
 
 }

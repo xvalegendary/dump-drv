@@ -6,6 +6,7 @@
 #include "mapper.hxx"
 #include "minidump_writer.hxx"
 #include "process_locator.hxx"
+#include "section_dumper.hxx"
 #include "symbol_resolver.hxx"
 #include "generated/driver_blob.hxx"
 
@@ -253,6 +254,15 @@ std::wstring hex_bytes(const Bytes& bytes) {
     return stream.str();
 }
 
+std::wstring section_text(const protocol::SectionDescriptor& section) {
+    std::wstring name;
+    for (std::size_t index = 0; index < protocol::section_name_size; ++index) {
+        if (section.name[index] == '\0') break;
+        name.push_back(static_cast<wchar_t>(static_cast<unsigned char>(section.name[index])));
+    }
+    return name.empty() ? L"unnamed" : name;
+}
+
 }
 
 namespace dump {
@@ -262,7 +272,7 @@ Application::Application(IConsole& console) noexcept : console_(console) {}
 int Application::run(const std::span<const std::wstring_view> arguments) noexcept {
     auto options = parse_options(arguments);
     if (!options) {
-        console_.error(L"usage: Dumper.exe [--output path] [--keep-partial] process.exe | --pid PID");
+        console_.error(L"usage: Dumper.exe [--sections | --dmp | --sectionsanddump] [--output path] [--keep-partial] [--no-conceal] [--module name.sys] process.exe | --pid PID");
         return 2;
     }
     if (!elevated()) {
@@ -285,6 +295,13 @@ int Application::run(const std::span<const std::wstring_view> arguments) noexcep
     SymbolResolver resolver(provider);
     auto symbols = resolver.resolve();
     if (!symbols) console_.progress(L"kernel symbols unavailable; continuing snapshot without offsets");
+    Result<protocol::ConcealTargets> conceal_targets(Status::invalid_state);
+    if (options.value().conceal) {
+        conceal_targets = resolver.resolve_conceal(options.value().module_name);
+        if (!conceal_targets) console_.progress(L"trace cleanup unavailable: " + status_text(conceal_targets.status()));
+    }
+    const bool want_sections = options.value().mode != Mode::dump;
+    const bool want_dump = options.value().mode != Mode::sections;
     const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::tm local{};
     localtime_s(&local, &now);
@@ -343,9 +360,6 @@ int Application::run(const std::span<const std::wstring_view> arguments) noexcep
     }
     console_.success(L"attached to " + process.value().name);
     console_.success(L"pid=" + std::to_wstring(process.value().process_id) + L" eprocess=" + hex_value(attached.value().eprocess) + L" peb=" + hex_value(attached.value().peb) + L" image_base=" + hex_value(attached.value().image_base));
-    status = writer.begin(dump_path);
-    if (status != Status::success) return fail(status, 12);
-    writer_started = true;
     status = manifest.begin(manifest_path);
     if (status != Status::success) return fail(status, 13);
     manifest_started = true;
@@ -362,64 +376,97 @@ int Application::run(const std::span<const std::wstring_view> arguments) noexcep
     }
     const auto metadata = system_metadata(process.value().process_id);
     manifest.success(L"os=" + std::to_wstring(metadata.major_version) + L"." + std::to_wstring(metadata.minor_version) + L" build=" + std::to_wstring(metadata.build_number));
-    status = writer.add_system_info(metadata);
-    if (status != Status::success) return fail(status, 14);
-    auto modules = remote_modules(client, attached.value(), process.value().name);
-    std::set<std::uint64_t> image_bases;
-    std::uint64_t address{};
+    SectionDumpResult sections{};
+    if (want_sections) {
+        auto table = client.query_sections();
+        if (!table) return fail(table.status(), 23);
+        SectionDumper dumper(client);
+        auto written = dumper.write(options.value().output_directory, stem, table.value());
+        if (!written) return fail(written.status(), 24);
+        sections = written.value();
+        manifest.success(L"section image_base=" + hex_value(table.value().image_base) + L" image_size=" + hex_value(table.value().image_size) + L" headers=" + hex_value(table.value().headers_size) + L" files=" + std::to_wstring(sections.files) + L" bytes=" + std::to_wstring(sections.bytes) + L" failed=" + std::to_wstring(sections.failed));
+        for (std::size_t index = 0; index < table.value().section_count; ++index) {
+            const auto& section = table.value().sections[index];
+            manifest.progress(L"section=" + std::to_wstring(index) + L" name=" + section_text(section) + L" rva=" + hex_value(section.virtual_address) + L" span=" + hex_value(section_extent(section, table.value().image_size)) + L" characteristics=" + hex_value(section.characteristics));
+        }
+        console_.success(L"sections=" + std::to_wstring(table.value().section_count) + L" files=" + std::to_wstring(sections.files) + L" bytes=" + std::to_wstring(sections.bytes));
+    }
     std::size_t region_index{};
     std::uint64_t copied_total{};
-    constexpr std::uint64_t highest = 0x00007fffffffffff;
-    while (address <= highest) {
-        auto queried = client.query_region(address);
-        if (!queried) {
-            if (region_index == 0) return fail(queried.status(), 15);
-            break;
-        }
-        const auto region = queried.value().region;
-        if (region.size == 0 || region.base < address || region.base > highest || region.size - 1 > highest - region.base) {
-            return fail(Status::validation_failure, 16);
-        }
-        status = writer.add_memory_region(MemoryRecord{region, 0});
-        if (status != Status::success) return fail(status, 17);
-        if (region.type == protocol::RegionType::image && region.allocation_base != 0) image_bases.insert(region.allocation_base);
-        std::uint64_t copied{};
-        std::int32_t native_status = queried.value().native_status;
-        if (readable(region)) {
-            while (copied < region.size) {
-                const auto requested = static_cast<std::uint32_t>((std::min)(region.size - copied, protocol::maximum_transfer));
-                auto chunk = client.read_memory(region.base + copied, requested);
-                if (!chunk) {
-                    native_status = static_cast<std::int32_t>(chunk.status());
-                    break;
+    if (want_dump) {
+        status = writer.begin(dump_path);
+        if (status != Status::success) return fail(status, 12);
+        writer_started = true;
+        status = writer.add_system_info(metadata);
+        if (status != Status::success) return fail(status, 14);
+        auto modules = remote_modules(client, attached.value(), process.value().name);
+        std::set<std::uint64_t> image_bases;
+        std::uint64_t address{};
+        constexpr std::uint64_t highest = 0x00007fffffffffff;
+        while (address <= highest) {
+            auto queried = client.query_region(address);
+            if (!queried) {
+                if (region_index == 0) return fail(queried.status(), 15);
+                break;
+            }
+            const auto region = queried.value().region;
+            if (region.size == 0 || region.base < address || region.base > highest || region.size - 1 > highest - region.base) {
+                return fail(Status::validation_failure, 16);
+            }
+            status = writer.add_memory_region(MemoryRecord{region, 0});
+            if (status != Status::success) return fail(status, 17);
+            if (region.type == protocol::RegionType::image && region.allocation_base != 0) image_bases.insert(region.allocation_base);
+            std::uint64_t copied{};
+            std::int32_t native_status = queried.value().native_status;
+            if (readable(region)) {
+                while (copied < region.size) {
+                    const auto requested = static_cast<std::uint32_t>((std::min)(region.size - copied, protocol::maximum_transfer));
+                    auto chunk = client.read_memory(region.base + copied, requested);
+                    if (!chunk) {
+                        native_status = static_cast<std::int32_t>(chunk.status());
+                        break;
+                    }
+                    native_status = chunk.value().native_status;
+                    if (chunk.value().bytes.empty()) break;
+                    status = writer.append_memory(region.base + copied, chunk.value().bytes);
+                    if (status != Status::success) return fail(status, 18);
+                    copied += chunk.value().bytes.size();
+                    copied_total += chunk.value().bytes.size();
+                    if (chunk.value().bytes.size() != requested) break;
                 }
-                native_status = chunk.value().native_status;
-                if (chunk.value().bytes.empty()) break;
-                status = writer.append_memory(region.base + copied, chunk.value().bytes);
-                if (status != Status::success) return fail(status, 18);
-                copied += chunk.value().bytes.size();
-                copied_total += chunk.value().bytes.size();
-                if (chunk.value().bytes.size() != requested) break;
+            }
+            manifest.region(region_index, region, copied, native_status);
+            console_.progress(L"region " + std::to_wstring(region_index) + L" base=" + hex_value(region.base) + L" copied=" + hex_value(copied));
+            ++region_index;
+            const auto next = region.base + region.size;
+            if (next == 0 || next > highest) break;
+            address = next;
+        }
+        for (const auto& module : modules) {
+            if (image_bases.contains(module.base) || module.base == attached.value().image_base) {
+                status = writer.add_module(module_record(client, module));
+                if (status != Status::success) return fail(status, 19);
             }
         }
-        manifest.region(region_index, region, copied, native_status);
-        console_.progress(L"region " + std::to_wstring(region_index) + L" base=" + hex_value(region.base) + L" copied=" + hex_value(copied));
-        ++region_index;
-        const auto next = region.base + region.size;
-        if (next == 0 || next > highest) break;
-        address = next;
+        status = writer.finalize();
+        if (status != Status::success) return fail(status, 20);
+        dump_finalized = true;
+        manifest.success(L"regions=" + std::to_wstring(region_index) + L" copied=" + std::to_wstring(copied_total));
     }
-    for (const auto& module : modules) {
-        if (image_bases.contains(module.base) || module.base == attached.value().image_base) {
-            status = writer.add_module(module_record(client, module));
-            if (status != Status::success) return fail(status, 19);
+    if (conceal_targets) {
+        auto concealed = client.conceal(conceal_targets.value());
+        if (!concealed) {
+            const auto text = L"trace cleanup: " + status_text(concealed.status());
+            console_.error(text);
+            manifest.error(text);
+        } else {
+            const auto& response = concealed.value();
+            const auto text = L"trace applied=" + hex_value(response.applied) + L" module_list=" + std::to_wstring(response.module_list_hidden) + L" unloaded=" + std::to_wstring(response.unloaded_hidden) + L" piddb=" + std::to_wstring(response.piddb_hidden) + L" hash_bucket=" + std::to_wstring(response.hash_bucket_hidden) + L" headers=" + std::to_wstring(response.headers_erased) + L" hits=" + std::to_wstring(response.name_hits);
+            console_.success(text);
+            manifest.success(text);
         }
     }
-    status = writer.finalize();
-    if (status != Status::success) return fail(status, 20);
-    dump_finalized = true;
-    manifest.success(L"regions=" + std::to_wstring(region_index) + L" copied=" + std::to_wstring(copied_total));
-    status = manifest.finalize(dump_path);
+    status = want_dump ? manifest.finalize(dump_path) : manifest.finalize();
     if (status != Status::success) return fail(status, 21);
     manifest_started = false;
     status = cleanup();
@@ -427,8 +474,9 @@ int Application::run(const std::span<const std::wstring_view> arguments) noexcep
         console_.error(L"cleanup: " + status_text(status));
         return 22;
     }
-    console_.success(L"dump=" + dump_path.wstring());
+    if (want_dump) console_.success(L"dump=" + dump_path.wstring());
     console_.success(L"manifest=" + manifest_path.wstring());
+    if (want_sections) console_.success(L"sections=" + std::to_wstring(sections.files) + L" files in " + options.value().output_directory.wstring());
     return 0;
 }
 

@@ -32,6 +32,8 @@ public:
     Status set_symbols(protocol::SymbolPacket packet) noexcept;
     Result<protocol::QueryRegionResponse> query_region(std::uint64_t address) noexcept;
     Result<ReadChunk> read_memory(std::uint64_t address, std::uint32_t size) noexcept;
+    Result<protocol::SectionsResponse> query_sections() noexcept;
+    Result<protocol::ConcealResponse> conceal(const protocol::ConcealTargets& targets) noexcept;
     Status close() noexcept;
 
 private:

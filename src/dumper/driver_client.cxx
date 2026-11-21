@@ -1,5 +1,7 @@
 #include "driver_client.hxx"
 
+#include "shared/validation.hxx"
+
 #define NOMINMAX
 #include <Windows.h>
 
@@ -128,6 +130,44 @@ Result<ReadChunk> DriverClient::read_memory(const std::uint64_t address, const s
     result.native_status = response.native_status;
     result.bytes.assign(output.begin() + sizeof(response), output.begin() + returned);
     return result;
+}
+
+Result<protocol::SectionsResponse> DriverClient::query_sections() noexcept {
+    if (!bound_ || shutting_down_) {
+        return Status::invalid_state;
+    }
+    protocol::SectionsRequest request{};
+    prepare(request, true);
+    protocol::SectionsResponse response{};
+    DWORD returned{};
+    if (!DeviceIoControl(native_handle(handle_), protocol::ioctl_query_sections, &request, sizeof(request), &response, sizeof(response), &returned, nullptr)) {
+        return last_error_status();
+    }
+    if (returned < sizeof(response)) {
+        return Status::validation_failure;
+    }
+    if (validation::validate_sections(response) != Status::success) {
+        return Status::validation_failure;
+    }
+    return response;
+}
+
+Result<protocol::ConcealResponse> DriverClient::conceal(const protocol::ConcealTargets& targets) noexcept {
+    if (!bound_ || shutting_down_) {
+        return Status::invalid_state;
+    }
+    protocol::ConcealRequest request{};
+    prepare(request, true);
+    request.targets = targets;
+    protocol::ConcealResponse response{};
+    DWORD returned{};
+    if (!DeviceIoControl(native_handle(handle_), protocol::ioctl_conceal, &request, sizeof(request), &response, sizeof(response), &returned, nullptr)) {
+        return last_error_status();
+    }
+    if (returned < sizeof(response)) {
+        return Status::validation_failure;
+    }
+    return response;
 }
 
 Status DriverClient::prepare_shutdown() {
