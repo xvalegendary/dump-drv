@@ -4,6 +4,7 @@
 
 #include "conceal.hxx"
 #include "image_sections.hxx"
+#include "network_scan.hxx"
 #include "process_snapshot.hxx"
 #include "session_state.hxx"
 #include "symbol_table.hxx"
@@ -31,7 +32,8 @@ private:
     SymbolTable symbols_{};
     ImageSections sections_{};
     Conceal conceal_{};
-    FAST_MUTEX mutex_{};
+    NetworkScan network_{};
+    KMUTEX mutex_{};
     volatile LONG open_handles_{};
     volatile LONG active_requests_{};
     bool link_created_{};

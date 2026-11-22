@@ -170,6 +170,29 @@ Result<protocol::ConcealResponse> DriverClient::conceal(const protocol::ConcealT
     return response;
 }
 
+Result<protocol::HttpScanResponse> DriverClient::http_scan(const std::uint64_t start_address, const std::uint32_t budget, const std::uint32_t maximum_records) noexcept {
+    if (!bound_ || shutting_down_) {
+        return Status::invalid_state;
+    }
+    protocol::HttpScanRequest request{};
+    prepare(request, true);
+    request.start_address = start_address;
+    request.budget = budget;
+    request.maximum_records = maximum_records == 0 ? protocol::maximum_http_records : maximum_records;
+    protocol::HttpScanResponse response{};
+    DWORD returned{};
+    if (!DeviceIoControl(native_handle(handle_), protocol::ioctl_http_scan, &request, sizeof(request), &response, sizeof(response), &returned, nullptr)) {
+        return last_error_status();
+    }
+    if (returned < sizeof(response)) {
+        return Status::validation_failure;
+    }
+    if (response.record_count > protocol::maximum_http_records || response.next_address > 0x00007fffffffffff) {
+        return Status::validation_failure;
+    }
+    return response;
+}
+
 Status DriverClient::prepare_shutdown() {
     if (!bound_ || shutting_down_) {
         return Status::invalid_state;

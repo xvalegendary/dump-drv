@@ -34,6 +34,7 @@ public:
     Result<ReadChunk> read_memory(std::uint64_t address, std::uint32_t size) noexcept;
     Result<protocol::SectionsResponse> query_sections() noexcept;
     Result<protocol::ConcealResponse> conceal(const protocol::ConcealTargets& targets) noexcept;
+    Result<protocol::HttpScanResponse> http_scan(std::uint64_t start_address, std::uint32_t budget, std::uint32_t maximum_records) noexcept;
     Status close() noexcept;
 
 private:

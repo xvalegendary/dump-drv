@@ -30,7 +30,7 @@ Device& Device::instance() noexcept {
 NTSTATUS Device::initialize(PDRIVER_OBJECT driver_object, const protocol::BootConfiguration& configuration) noexcept {
     configuration_ = configuration;
     driver_object_ = driver_object;
-    ExInitializeFastMutex(&mutex_);
+    KeInitializeMutex(&mutex_, 0);
     auto status = snapshot_.initialize();
     if (!NT_SUCCESS(status)) {
         return status;
@@ -61,21 +61,21 @@ NTSTATUS Device::initialize(PDRIVER_OBJECT driver_object, const protocol::BootCo
 }
 
 NTSTATUS Device::finalize(const protocol::Nonce& nonce) noexcept {
-    ExAcquireFastMutex(&mutex_);
+    KeWaitForSingleObject(&mutex_, Executive, KernelMode, FALSE, nullptr);
     bool nonce_matches = true;
     for (protocol::usize index = 0; index < nonce.size(); ++index) {
         nonce_matches = nonce_matches && nonce[index] == configuration_.header.nonce[index];
     }
     const auto state = session_.state();
     if (!nonce_matches || (state != protocol::SessionState::shutting_down && state != protocol::SessionState::created) || open_handles_ != 0 || active_requests_ != 0) {
-        ExReleaseFastMutex(&mutex_);
+        KeReleaseMutex(&mutex_, FALSE);
         return STATUS_DEVICE_BUSY;
     }
     if (state == protocol::SessionState::shutting_down) {
         session_.stop();
     }
     snapshot_.detach();
-    ExReleaseFastMutex(&mutex_);
+    KeReleaseMutex(&mutex_, FALSE);
     if (link_created_) {
         UNICODE_STRING link{};
         RtlInitUnicodeString(&link, configuration_.symbolic_link.data());
@@ -121,7 +121,7 @@ NTSTATUS Device::handle_control(PIRP irp, PIO_STACK_LOCATION stack) noexcept {
         return complete(irp, status, information);
     };
     const auto code = stack->Parameters.DeviceIoControl.IoControlCode;
-    ExAcquireFastMutex(&mutex_);
+    KeWaitForSingleObject(&mutex_, Executive, KernelMode, FALSE, nullptr);
     NTSTATUS status = STATUS_INVALID_DEVICE_REQUEST;
     ULONG_PTR information{};
     if (code == protocol::ioctl_bind) {
@@ -218,8 +218,20 @@ NTSTATUS Device::handle_control(PIRP irp, PIO_STACK_LOCATION stack) noexcept {
         } else {
             status = STATUS_INVALID_PARAMETER;
         }
+    } else if (code == protocol::ioctl_http_scan) {
+        protocol::HttpScanRequest* request{};
+        if (buffered_request(stack, irp, request) && stack->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(protocol::HttpScanResponse) && validation::validate_header(request->header, configuration_.header.nonce, sizeof(*request)) == Status::success && validation::validate_range(request->start_address, 1) == Status::success && session_.accept_sequence(request->header.sequence) == Status::success) {
+            const auto start_address = request->start_address;
+            const auto budget = request->budget;
+            const auto maximum_records = request->maximum_records;
+            auto* output = static_cast<protocol::HttpScanResponse*>(irp->AssociatedIrp.SystemBuffer);
+            status = network_.scan(snapshot_, start_address, budget, maximum_records, *output);
+            information = sizeof(*output);
+        } else {
+            status = STATUS_INVALID_PARAMETER;
+        }
     }
-    ExReleaseFastMutex(&mutex_);
+    KeReleaseMutex(&mutex_, FALSE);
     return finish(status, information);
 }
 

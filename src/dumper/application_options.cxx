@@ -49,13 +49,27 @@ Result<Options> parse_options(const std::span<const std::wstring_view> arguments
                 result.conceal = false;
             } else if (argument == L"--sections") {
                 ++modes;
+                result.explicit_mode = true;
                 result.mode = Mode::sections;
             } else if (argument == L"--dmp") {
                 ++modes;
+                result.explicit_mode = true;
                 result.mode = Mode::dump;
             } else if (argument == L"--sectionsanddump") {
                 ++modes;
+                result.explicit_mode = true;
                 result.mode = Mode::sections_and_dump;
+            } else if (argument == L"--net") {
+                result.net = true;
+            } else if (argument == L"--net-seconds") {
+                if (++index == arguments.size()) return Status::invalid_argument;
+                const std::wstring owned(arguments[index]);
+                wchar_t* end{};
+                errno = 0;
+                const auto parsed = std::wcstoul(owned.c_str(), &end, 10);
+                if (errno == ERANGE || end != owned.c_str() + owned.size() || parsed == 0 || parsed > 86400) return Status::invalid_argument;
+                result.net_seconds = static_cast<std::uint32_t>(parsed);
+                result.net = true;
             } else if (argument == L"--output") {
                 if (++index == arguments.size() || arguments[index].empty()) return Status::invalid_argument;
                 result.output_directory = arguments[index];

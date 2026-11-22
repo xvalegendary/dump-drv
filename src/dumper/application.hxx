@@ -25,8 +25,11 @@ struct Options {
     std::filesystem::path output_directory;
     std::wstring module_name;
     Mode mode{Mode::dump};
+    std::uint32_t net_seconds{30};
     bool keep_partial{};
     bool conceal{true};
+    bool net{};
+    bool explicit_mode{};
 };
 
 Result<Options> parse_options(std::span<const std::wstring_view> arguments) noexcept;

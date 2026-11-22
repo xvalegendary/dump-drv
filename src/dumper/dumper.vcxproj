@@ -13,7 +13,7 @@
   <PropertyGroup><OutDir>$(RepoRoot)x64\$(Configuration)\</OutDir><IntDir>$(RepoRoot)x64\obj\$(ProjectName)\$(Configuration)\</IntDir><TargetName Condition="'$(DumperOutputName)'==''">Dumper</TargetName><TargetName Condition="'$(DumperOutputName)'!=''">$(DumperOutputName)</TargetName></PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile><AdditionalIncludeDirectories>$(RepoRoot);$(RepoRoot)src;$(RepoRoot)external\kdmapper\kdmapper\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
-    <Link><AdditionalDependencies>bcrypt.lib;dbghelp.lib;psapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies><UACExecutionLevel>RequireAdministrator</UACExecutionLevel></Link>
+    <Link><AdditionalDependencies>bcrypt.lib;dbghelp.lib;iphlpapi.lib;psapi.lib;version.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies><UACExecutionLevel>RequireAdministrator</UACExecutionLevel></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cxx" />
@@ -27,8 +27,10 @@
     <ClCompile Include="manifest_writer.cxx" />
     <ClCompile Include="mapper.cxx" />
     <ClCompile Include="minidump_writer.cxx" />
+    <ClCompile Include="net_capture.cxx" />
     <ClCompile Include="process_locator.cxx" />
     <ClCompile Include="symbol_resolver.cxx" />
+    <ClCompile Include="..\shared\http.cxx" />
     <ClCompile Include="..\shared\validation.cxx" />
   </ItemGroup>
   <ItemGroup>

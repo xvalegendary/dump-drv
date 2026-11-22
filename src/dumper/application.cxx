@@ -5,6 +5,7 @@
 #include "manifest_writer.hxx"
 #include "mapper.hxx"
 #include "minidump_writer.hxx"
+#include "net_capture.hxx"
 #include "process_locator.hxx"
 #include "section_dumper.hxx"
 #include "symbol_resolver.hxx"
@@ -272,7 +273,7 @@ Application::Application(IConsole& console) noexcept : console_(console) {}
 int Application::run(const std::span<const std::wstring_view> arguments) noexcept {
     auto options = parse_options(arguments);
     if (!options) {
-        console_.error(L"usage: Dumper.exe [--sections | --dmp | --sectionsanddump] [--output path] [--keep-partial] [--no-conceal] [--module name.sys] process.exe | --pid PID");
+        console_.error(L"usage: Dumper.exe [--sections | --dmp | --sectionsanddump] [--net [--net-seconds N]] [--output path] [--keep-partial] [--no-conceal] [--module name.sys] process.exe | --pid PID");
         return 2;
     }
     if (!elevated()) {
@@ -300,14 +301,16 @@ int Application::run(const std::span<const std::wstring_view> arguments) noexcep
         conceal_targets = resolver.resolve_conceal(options.value().module_name);
         if (!conceal_targets) console_.progress(L"trace cleanup unavailable: " + status_text(conceal_targets.status()));
     }
-    const bool want_sections = options.value().mode != Mode::dump;
-    const bool want_dump = options.value().mode != Mode::sections;
+    const bool capture_only = options.value().net && !options.value().explicit_mode;
+    const bool want_sections = options.value().mode != Mode::dump && !capture_only;
+    const bool want_dump = options.value().mode != Mode::sections && !capture_only;
     const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::tm local{};
     localtime_s(&local, &now);
     const auto stem = make_output_stem(process.value().name, local);
     const auto dump_path = options.value().output_directory / (stem + L".dmp");
     const auto manifest_path = options.value().output_directory / (stem + L".txt");
+    const auto net_path = options.value().output_directory / (stem + L".net.txt");
     MiniDumpWriter writer;
     ManifestWriter manifest;
     bool writer_started{};
@@ -376,6 +379,19 @@ int Application::run(const std::span<const std::wstring_view> arguments) noexcep
     }
     const auto metadata = system_metadata(process.value().process_id);
     manifest.success(L"os=" + std::to_wstring(metadata.major_version) + L"." + std::to_wstring(metadata.minor_version) + L" build=" + std::to_wstring(metadata.build_number));
+    NetCaptureStats capture{};
+    if (options.value().net) {
+        NetworkCapture network(client, console_);
+        auto captured = network.run(process.value().process_id, options.value().net_seconds, net_path);
+        if (!captured) {
+            const auto text = L"capture: " + status_text(captured.status());
+            console_.error(text);
+            manifest.error(text);
+        } else {
+            capture = captured.value();
+            manifest.success(L"capture requests=" + std::to_wstring(capture.requests) + L" connections=" + std::to_wstring(capture.connections) + L" sweeps=" + std::to_wstring(capture.sweeps) + L" failures=" + std::to_wstring(capture.failures) + L" log=" + net_path.wstring());
+        }
+    }
     SectionDumpResult sections{};
     if (want_sections) {
         auto table = client.query_sections();
@@ -477,6 +493,7 @@ int Application::run(const std::span<const std::wstring_view> arguments) noexcep
     if (want_dump) console_.success(L"dump=" + dump_path.wstring());
     console_.success(L"manifest=" + manifest_path.wstring());
     if (want_sections) console_.success(L"sections=" + std::to_wstring(sections.files) + L" files in " + options.value().output_directory.wstring());
+    if (options.value().net) console_.success(L"capture log=" + net_path.wstring() + L" requests=" + std::to_wstring(capture.requests) + L" connections=" + std::to_wstring(capture.connections));
     return 0;
 }
 
